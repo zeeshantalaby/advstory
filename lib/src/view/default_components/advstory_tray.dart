@@ -1,27 +1,9 @@
-import 'package:advstory/advstory.dart';
 import 'package:advstory/src/util/animated_border_painter.dart';
 import 'package:advstory/src/view/components/shimmer.dart';
+import 'package:advstory/advstory.dart';
 import 'package:flutter/material.dart';
+import 'package:video_player/video_player.dart';
 
-/// A highly customizable animated story tray.
-///
-/// Circular or rectangular image with gradient border. Shows shimmer effect
-/// when tray image is getting ready to show.
-///
-/// When tapped, this widget starts a border rotation animation and stops the
-/// animation when [AdvStory] prepares the contents of the tray.
-///
-/// [AdvStoryTray] is a predefined component, any widget can be used as a
-/// story tray but it's recommended to create an animated tray by extending
-/// [AnimatedTray] class.
-///
-/// ---
-/// AdvStory checks the tray widget type when the tray builder is called. If
-/// tray is subtype of [AnimatedTray], [AdvStory] prepares the tray content
-/// before displaying the story view and manages the starting and stopping of
-/// the tray animation.
-///
-/// See [AnimatedTray] for more information.
 class AdvStoryTray extends AnimatedTray {
   /// Creates a story tray to show in story tray list.
   ///
@@ -29,7 +11,10 @@ class AdvStoryTray extends AnimatedTray {
   AdvStoryTray({
     super.key,
     required this.url,
+    required this.index,
+    this.customWidget,
     this.username,
+    required this.video,
     this.size = const Size(80, 80),
     this.shimmerStyle = const ShimmerStyle(),
     this.shape = BoxShape.circle,
@@ -47,12 +32,12 @@ class AdvStoryTray extends AnimatedTray {
     this.animationDuration = const Duration(milliseconds: 1200),
     double? borderRadius,
   })  : assert(
-          (() => shape == BoxShape.circle ? size.width == size.height : true)(),
-          'Size width and height must be equal for a circular tray',
-        ),
+  (() => shape == BoxShape.circle ? size.width == size.height : true)(),
+  'Size width and height must be equal for a circular tray',
+  ),
         assert(
-          borderGradientColors.length >= 2,
-          'At least 2 colors are required for tray border gradient',
+        borderGradientColors.length >= 2,
+        'At least 2 colors are required for tray border gradient',
         ),
         borderRadius = shape == BoxShape.circle
             ? size.width
@@ -60,14 +45,17 @@ class AdvStoryTray extends AnimatedTray {
 
   /// Image url that shown as tray.
   final String url;
+  final int index;
 
   /// Name of the user who posted the story. This username is displayed
   /// below the story tray.
   final Widget? username;
+  final Widget? customWidget;
 
   /// Size of the story tray. For a circular tray, width and height must be
   /// equal.
   final Size size;
+  final bool video;
 
   /// Border gradient colors. Two same color creates a solid border.
   final List<Color> borderGradientColors;
@@ -97,6 +85,7 @@ class AdvStoryTray extends AnimatedTray {
 /// State of the [AdvStoryTray] widget.
 class _AdvStoryTrayState extends AnimatedTrayState<AdvStoryTray>
     with TickerProviderStateMixin {
+  late VideoPlayerController _controller;
   late final _rotationController = AnimationController(
     vsync: this,
     duration: widget.animationDuration,
@@ -138,7 +127,16 @@ class _AdvStoryTrayState extends AnimatedTrayState<AdvStoryTray>
   @override
   void initState() {
     _fadedColors = _calculateFadedColors(widget.borderGradientColors);
-
+    if (widget.video) {
+      _controller = VideoPlayerController.networkUrl(Uri.parse(widget.url))
+        ..initialize().then((_) {
+          if (widget.index == 0) {
+            _controller.setVolume(0.0);
+            _controller.play();
+          }
+          setState(() {});
+        });
+    }
     super.initState();
   }
 
@@ -192,7 +190,34 @@ class _AdvStoryTrayState extends AnimatedTrayState<AdvStoryTray>
                   borderRadius: BorderRadius.circular(
                     widget.borderRadius - (widget.strokeWidth + widget.gapSize),
                   ),
-                  child: Image.network(
+                  child: widget.video
+                      ? SizedBox(
+                      child: _controller.value.isInitialized
+                          ? FittedBox(
+                        fit: BoxFit.contain,
+                        child: GestureDetector(
+                          onTap: () {
+                            if (widget.index == 0) {
+                              _controller.pause();
+                            }
+                          },
+                          child: SizedBox(
+                              width: widget.size.width,
+                              height: widget.size.height,
+                              // color: Colors.red,
+                              child: Padding(
+                                padding: const EdgeInsets.all(5),
+                                child: ClipRRect(
+                                    borderRadius:
+                                    BorderRadius.circular(
+                                      widget.borderRadius - 5,
+                                    ),
+                                    child: VideoPlayer(_controller)),
+                              )),
+                        ),
+                      )
+                          : Shimmer(style: widget.shimmerStyle))
+                      : Image.network(
                     widget.url,
                     width: widget.size.width -
                         (widget.gapSize + widget.strokeWidth) * 2,
@@ -202,17 +227,17 @@ class _AdvStoryTrayState extends AnimatedTrayState<AdvStoryTray>
                     frameBuilder: (context, child, frame, _) {
                       return frame != null
                           ? TweenAnimationBuilder<double>(
-                              tween: Tween<double>(begin: .1, end: 1),
-                              curve: Curves.ease,
-                              duration: const Duration(milliseconds: 300),
-                              builder:
-                                  (BuildContext context, double opacity, _) {
-                                return Opacity(
-                                  opacity: opacity,
-                                  child: child,
-                                );
-                              },
-                            )
+                        tween: Tween<double>(begin: .1, end: 1),
+                        curve: Curves.ease,
+                        duration: const Duration(milliseconds: 300),
+                        builder: (BuildContext context,
+                            double opacity, _) {
+                          return Opacity(
+                            opacity: opacity,
+                            child: child,
+                          );
+                        },
+                      )
                           : Shimmer(style: widget.shimmerStyle);
                     },
                     errorBuilder: (_, __, ___) {
@@ -221,6 +246,7 @@ class _AdvStoryTrayState extends AnimatedTrayState<AdvStoryTray>
                   ),
                 ),
               ),
+              if (widget.customWidget != null) widget.customWidget!,
             ],
           ),
         ),
