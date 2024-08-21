@@ -1,0 +1,2 @@
+# advstory
+Story view 
